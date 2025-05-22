@@ -3,82 +3,115 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>モールス信号変換アプリ</title>
-  <link rel="manifest" href="manifest.json">
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js')
-          .then(reg => console.log('Service Worker registered:', reg))
-          .catch(err => console.log('Service Worker error:', err));
-      });
-    }
-  </script>
+  <title>モールス信号（音・光・和文対応）</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 2em; background: #f5f5f5; }
-    textarea, button { width: 100%; padding: 1em; font-size: 1em; margin-top: 1em; }
-    .output { margin-top: 1em; padding: 1em; background: #fff; border: 1px solid #ccc; }
+    body { font-family: sans-serif; padding: 20px; background-color: black; color: white; transition: background-color 0.1s; }
+    label { display: block; margin-top: 1em; }
+    #textInput { width: 100%; max-width: 400px; }
   </style>
 </head>
 <body>
-  <h1>モールス信号変換＆再生</h1>
-  <textarea id="textInput" rows="4" placeholder="テキストを入力してください"></textarea>
-  <button onclick="convertToMorse()">変換</button>
-  <button onclick="playMorse()">音で再生</button>
-  <div class="output" id="morseOutput"></div>
+  <h1>モールス信号アプリ</h1>
+  <textarea id="textInput" rows="4" placeholder="和文または英文を入力してください"></textarea><br>
+  <button onclick="playMorse()">再生</button>
+
+  <label>周波数 (Hz):
+    <input type="number" id="freqInput" value="600" min="100" max="2000">
+  </label>
+  <label>ドットの長さ (ms):
+    <input type="number" id="dotDurationInput" value="120" min="50" max="1000">
+  </label>
+  <label>波形 (音色):
+    <select id="waveTypeInput">
+      <option value="sine">sine</option>
+      <option value="square">square</option>
+      <option value="triangle">triangle</option>
+      <option value="sawtooth">sawtooth</option>
+    </select>
+  </label>
 
   <script>
-    const morseTable = {
-      "A": ".-", "B": "-...", "C": "-.-.", "D": "-..", "E": ".", 
-      "F": "..-.", "G": "--.", "H": "....", "I": "..", "J": ".---",
-      "K": "-.-", "L": ".-..", "M": "--", "N": "-.", "O": "---", 
-      "P": ".--.", "Q": "--.-", "R": ".-.", "S": "...", "T": "-", 
-      "U": "..-", "V": "...-", "W": ".--", "X": "-..-", "Y": "-.--", 
-      "Z": "--..", "0": "-----", "1": ".----", "2": "..---",
-      "3": "...--", "4": "....-", "5": ".....", "6": "-....",
-      "7": "--...", "8": "---..", "9": "----.", " ": "/"
+    const morseLatin = {
+      'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.',
+      'F': '..-.', 'G': '--.', 'H': '....', 'I': '..', 'J': '.---',
+      'K': '-.-', 'L': '.-..', 'M': '--', 'N': '-.', 'O': '---',
+      'P': '.--.', 'Q': '--.-', 'R': '.-.', 'S': '...', 'T': '-',
+      'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-', 'Y': '-.--',
+      'Z': '--..',
+      '1': '.----', '2': '..---', '3': '...--', '4': '....-', '5': '.....',
+      '6': '-....', '7': '--...', '8': '---..', '9': '----.', '0': '-----',
+      ' ': '/', '-': '-', '.': '.'
     };
 
-    let morseCode = "";
+    const morseJapanese = {
+      'ア': '.-',     'イ': '..',    'ウ': '..-',   'エ': '-.---', 'オ': '.-...',
+      'カ': '.-..',   'キ': '-.-..', 'ク': '...-',  'ケ': '-.--',  'コ': '----',
+      'サ': '-.-.-',  'シ': '--.-.', 'ス': '---.-', 'セ': '.---.', 'ソ': '---.',
+      'タ': '-',      'チ': '..-.',  'ツ': '.--.',  'テ': '.-.--', 'ト': '..-..',
+      'ナ': '.-.',    'ニ': '-.-.',  'ヌ': '....',  'ネ': '--.-',  'ノ': '..--',
+      'ハ': '-...',   'ヒ': '--..-', 'フ': '--..',  'ヘ': '.',     'ホ': '-..',
+      'マ': '-..-',   'ミ': '..-.-', 'ム': '-',     'メ': '-...-', 'モ': '-..-.',
+      'ヤ': '.--',    'ユ': '-..--', 'ヨ': '--',    'ラ': '...',   'リ': '--.',
+      'ル': '-.--.',  'レ': '---',   'ロ': '.-.-',  'ワ': '-.-',   'ヲ': '.---',
+      'ン': '.-.-.',  '゛': '..',    '゜': '..--.', 'ー': '.--.-'
+    };
 
-    function convertToMorse() {
-      const text = document.getElementById("textInput").value.toUpperCase();
-      morseCode = "";
-      for (let char of text) {
-        morseCode += morseTable[char] ? morseTable[char] + " " : "? ";
-      }
-      document.getElementById("morseOutput").innerText = morseCode;
+    function toMorse(text) {
+      return [...text].map(char => {
+        const upper = char.toUpperCase();
+        if (morseLatin[upper]) return morseLatin[upper];
+        if (morseJapanese[char]) return morseJapanese[char];
+        return '';
+      }).join(' ');
     }
 
-    function playMorse() {
-      const dot = 150, dash = dot * 3, gap = dot;
-      const context = new (window.AudioContext || window.webkitAudioContext)();
-      let t = context.currentTime;
+    function flash(duration) {
+      document.body.style.backgroundColor = 'white';
+      document.body.style.color = 'black';
+      setTimeout(() => {
+        document.body.style.backgroundColor = 'black';
+        document.body.style.color = 'white';
+      }, duration);
+    }
 
-      for (let c of morseCode) {
-        if (c === ".") {
-          playTone(context, t, dot); t += (dot + gap) / 1000;
-        } else if (c === "-") {
-          playTone(context, t, dash); t += (dash + gap) / 1000;
-        } else if (c === "/") {
-          t += (dot * 7) / 1000;
-        } else {
-          t += gap / 1000;
+    function playAt(audioCtx, freq, duration, waveType, startTime) {
+      const oscillator = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      oscillator.type = waveType;
+      oscillator.frequency.value = freq;
+      oscillator.connect(gain);
+      gain.connect(audioCtx.destination);
+      oscillator.start(startTime);
+      oscillator.stop(startTime + duration / 1000);
+
+      // 光（フラッシュ）も再生タイミングに合わせる
+      setTimeout(() => flash(duration), (startTime - audioCtx.currentTime) * 1000);
+    }
+
+    async function playMorse() {
+      const text = document.getElementById('textInput').value;
+      const freq = parseInt(document.getElementById('freqInput').value);
+      const dotDuration = parseInt(document.getElementById('dotDurationInput').value);
+      const dashDuration = dotDuration * 3;
+      const waveType = document.getElementById('waveTypeInput').value;
+
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const morse = toMorse(text);
+      let time = audioCtx.currentTime;
+
+      for (const symbol of morse) {
+        if (symbol === '.') {
+          playAt(audioCtx, freq, dotDuration, waveType, time);
+          time += dotDuration / 1000 + 0.1;
+        } else if (symbol === '-') {
+          playAt(audioCtx, freq, dashDuration, waveType, time);
+          time += dashDuration / 1000 + 0.1;
+        } else if (symbol === ' ') {
+          time += 0.2;
+        } else if (symbol === '/') {
+          time += 0.5;
         }
       }
-    }
-
-    function playTone(context, start, duration) {
-      const osc = context.createOscillator();
-      const gain = context.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(600, start);
-      osc.connect(gain);
-      gain.connect(context.destination);
-      gain.gain.setValueAtTime(1, start);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + duration / 1000);
-      osc.start(start);
-      osc.stop(start + duration / 1000);
     }
   </script>
 </body>
