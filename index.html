@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>モールス信号変換アプリ</title>
+  <link rel="manifest" href="manifest.json">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js')
+          .then(reg => console.log('Service Worker registered:', reg))
+          .catch(err => console.log('Service Worker error:', err));
+      });
+    }
+  </script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 2em; background: #f5f5f5; }
+    textarea, button { width: 100%; padding: 1em; font-size: 1em; margin-top: 1em; }
+    .output { margin-top: 1em; padding: 1em; background: #fff; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h1>モールス信号変換＆再生</h1>
+  <textarea id="textInput" rows="4" placeholder="テキストを入力してください"></textarea>
+  <button onclick="convertToMorse()">変換</button>
+  <button onclick="playMorse()">音で再生</button>
+  <div class="output" id="morseOutput"></div>
+
+  <script>
+    const morseTable = {
+      "A": ".-", "B": "-...", "C": "-.-.", "D": "-..", "E": ".", 
+      "F": "..-.", "G": "--.", "H": "....", "I": "..", "J": ".---",
+      "K": "-.-", "L": ".-..", "M": "--", "N": "-.", "O": "---", 
+      "P": ".--.", "Q": "--.-", "R": ".-.", "S": "...", "T": "-", 
+      "U": "..-", "V": "...-", "W": ".--", "X": "-..-", "Y": "-.--", 
+      "Z": "--..", "0": "-----", "1": ".----", "2": "..---",
+      "3": "...--", "4": "....-", "5": ".....", "6": "-....",
+      "7": "--...", "8": "---..", "9": "----.", " ": "/"
+    };
+
+    let morseCode = "";
+
+    function convertToMorse() {
+      const text = document.getElementById("textInput").value.toUpperCase();
+      morseCode = "";
+      for (let char of text) {
+        morseCode += morseTable[char] ? morseTable[char] + " " : "? ";
+      }
+      document.getElementById("morseOutput").innerText = morseCode;
+    }
+
+    function playMorse() {
+      const dot = 150, dash = dot * 3, gap = dot;
+      const context = new (window.AudioContext || window.webkitAudioContext)();
+      let t = context.currentTime;
+
+      for (let c of morseCode) {
+        if (c === ".") {
+          playTone(context, t, dot); t += (dot + gap) / 1000;
+        } else if (c === "-") {
+          playTone(context, t, dash); t += (dash + gap) / 1000;
+        } else if (c === "/") {
+          t += (dot * 7) / 1000;
+        } else {
+          t += gap / 1000;
+        }
+      }
+    }
+
+    function playTone(context, start, duration) {
+      const osc = context.createOscillator();
+      const gain = context.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(600, start);
+      osc.connect(gain);
+      gain.connect(context.destination);
+      gain.gain.setValueAtTime(1, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + duration / 1000);
+      osc.start(start);
+      osc.stop(start + duration / 1000);
+    }
+  </script>
+</body>
+</html>
